@@ -1,0 +1,1 @@
+import {cookies} from 'next/headers';export async function POST(){(await cookies()).delete('mds_access');return Response.json({ok:true})}
