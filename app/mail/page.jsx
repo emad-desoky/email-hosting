@@ -333,6 +333,47 @@ export default function MailPage(){
    else tell('Email notifications enabled.');
   }catch(e){tell(e.message,'error')}finally{setPreferenceBusy(false)}
  }
+
+ function toggleBell(){
+   setNotificationPanel(previous=>!previous);
+   setNewAlertIds([]);
+   setDesktopPermission(typeof Notification==='undefined'?'unsupported':Notification.permission);
+ }
+ async function testNotifications(){
+   if(!preferences.notifications){
+     tell('First enable new email notifications in Settings.','error');
+     return;
+   }
+   if(typeof Notification==='undefined'){
+     tell('In-app alerts are active. This browser does not support desktop notifications.');
+     return;
+   }
+   let permission=Notification.permission;
+   if(permission==='default')permission=await Notification.requestPermission();
+   setDesktopPermission(permission);
+   if(permission==='granted'){
+     try{
+       new Notification('MDS Mail — notification test',{
+         body:'Your desktop notification permission is working.',
+         icon:'/mds-logo.png',
+         tag:'mds-mail-test'
+       });
+       tell('Test notification sent. Check your desktop or notification center.');
+     }catch(e){
+       console.warn('Notification display failed',e);
+       tell('Chrome allowed notifications, but the desktop alert could not be displayed. Check Windows notification settings.','error');
+     }
+   }else if(permission==='denied'){
+     tell('Chrome blocked desktop notifications. Allow them in site settings beside the address bar.','error');
+   }else{
+     tell('Desktop notifications are unavailable in this browser. In-app alerts still work.','error');
+   }
+ }
+ function openRecentMessage(mail){
+   setNotificationPanel(false);setNewAlertIds([]);
+   folderTo('inbox');
+   void openMessage({...mail,folder:'inbox',recipients:[],body_text:''});
+ }
  const currentFolder=FOLDERS.find(x=>x[0]===folder)?.[2]||'Unread';
  const finishCompose=(kind,info)=>{
    setCompose(null);
