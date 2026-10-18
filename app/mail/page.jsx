@@ -34,9 +34,11 @@ export default function MailPage(){
  const [detail,setDetail]=useState(null),[detailLoading,setDetailLoading]=useState(false);
  const [theme,setTheme]=useState('dark'),[mobile,setMobile]=useState(false),[settings,setSettings]=useState(false);
  const [notificationPanel,setNotificationPanel]=useState(false),[preferences,setPreferences]=useState({notifications:false}),[preferenceBusy,setPreferenceBusy]=useState(false);
+ const [desktopPermission,setDesktopPermission]=useState('unknown'),[recentMail,setRecentMail]=useState([]),[newAlertIds,setNewAlertIds]=useState([]);
  const [notice,setNotice]=useState(null),[loading,setLoading]=useState(true);
  const [receiving,setReceiving]=useState(null),[receivingBusy,setReceivingBusy]=useState(false);
  const lastUnread=useRef(new Map()),queryRef=useRef(null),toastTimer=useRef(null);
+ const notifyCursor=useRef(new Map()),notifyBusy=useRef(new Set());
  const cache=useRef(new Map()),listRequest=useRef(null),listGeneration=useRef(0);
  const activeMailbox=useRef(null),countGeneration=useRef(0),detailGeneration=useRef(0);
  const boxId=identity?.mailboxId,userIsAdmin=user?.role==='admin'&&user.email==='mds2026@mds-healthcare.com';
@@ -101,15 +103,9 @@ export default function MailPage(){
      if(generation!==countGeneration.current||activeMailbox.current!==boxId)return;
      const updated=data.counts||{};
      setCounts(updated);
-     const latest=Number(updated.unread||0),previous=lastUnread.current.get(boxId);
-     if(previous!==undefined&&latest>previous&&preferences.notifications){
-       tell(latest-previous===1?'You have a new email.':'You have '+String(latest-previous)+' new emails.');
-       if(typeof Notification!=='undefined'&&Notification.permission==='granted')
-         new Notification('MDS Mail',{body:'New mail received in your inbox.'});
-     }
-     lastUnread.current.set(boxId,latest);
+     lastUnread.current.set(boxId,Number(updated.unread||0));
    }catch(e){if(!silent)tell(e.message,'error')}
- },[boxId,preferences.notifications]);
+ },[boxId]);
 
  useEffect(()=>{
   if(typeof window!=='undefined')setTheme(localStorage.getItem('mds-mail-theme')||'dark');
