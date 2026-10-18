@@ -117,7 +117,7 @@ export default function MailPage(){
   try{
    const out=await api('/api/admin/mail/receiving',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const status=await api('/api/admin/mail/receiving');setReceiving(status);
-   tell(out.alreadyConfigured?'Incoming processing is already enabled.':'Incoming webhook connected. Check the domain DNS next.');
+   tell(out.warning||out.message||'Resend has been connected. Review your incoming DNS configuration.',out.warning?'error':'success');
   }catch(e){tell(e.message,'error')}
   finally{setReceivingBusy(false)}
  }
@@ -241,11 +241,23 @@ export default function MailPage(){
     <div className="settings-head"><h2>Workspace settings</h2><Icon icon={X} title="Close" onClick={()=>setSettings(false)}/></div>
     <div className="setting-row"><div><strong>Appearance</strong><p>Switch between light and dark mode.</p></div>
       <button className="outline-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>} {theme==='dark'?'Light mode':'Dark mode'}</button></div>
-    <div className="setting-row"><div><strong>New email notifications</strong><p>{preferences.notifications?'Enabled: you will be notified about new messages.':'Disabled: no new-mail alerts will appear.'}</p></div>
+    <div className="setting-row"><div><strong>New email notifications</strong><p>{preferences.notifications?'Enabled: you will be notified about new messages.':'Disabled: no new-mail alerts will appear.'}</p>
+      {typeof Notification!=='undefined'&&Notification.permission==='denied'&&<p className="inbound-alert">Chrome is blocking desktop alerts. Open the site controls next to the address bar, then allow Notifications.</p>}</div>
       <button className={'outline-btn '+(preferences.notifications?'on':'')} onClick={toggleNotifs} disabled={preferenceBusy}>
        <Bell size={16}/>{preferenceBusy?'Saving...':preferences.notifications?'Disable':'Enable'}</button></div>
     <div className="setting-row"><div><strong>Signed-in account</strong><p>{user?.email}</p></div><Check size={20}/></div>
-    {userIsAdmin&&<div className="setting-row inbound-status"><div><strong>Incoming mail connection</strong><p>{receiving?.webhookReady?'Receiving webhook connected.':'Receiving webhook is not connected.'}</p><p>Incoming email also requires the correct DNS mail routing.</p>{receiving?.incomingMx?.length>0&&<p>Current mail hosts: {receiving.incomingMx.map(x=>x.host).join(', ')}</p>}<p className="muted">Do not replace an existing mail provider's MX records without planning the switch.</p></div>{!receiving?.webhookReady?<button type="button" className="outline-btn" onClick={enableReceiving} disabled={receivingBusy}>{receivingBusy?'Connecting...':'Enable receiving'}</button>:<Check size={20}/>}</div>}
+    {userIsAdmin&&<div className="setting-row inbound-status"><div className="inbound-details">
+      <strong>Incoming mail connection</strong>
+      <p><b>Resend webhook:</b> {receiving===null?'Checking...':receiving.webhookReady?'Connected':'Not connected'}</p>
+      <p><b>Resend receiving:</b> {receiving?.resendReceiving==='enabled'?'Enabled':receiving?.resendReceiving==='disabled'?'Disabled':'Not yet verified'}</p>
+      <p><b>Domain MX routing:</b> {receiving?.dnsReady?'Ready':'Needs review'}</p>
+      {receiving?.providerError&&<p className="inbound-alert">{receiving.providerError}</p>}
+      {receiving?.currentMx?.length>0&&<p>Current MX hosts: {receiving.currentMx.map(x=>x.host).join(', ')}</p>}
+      {receiving?.requiredMx?.length>0&&<div className="inbound-mx-records"><p>Resend requires these incoming MX records:</p>{receiving.requiredMx.map((r,i)=><div key={i}><code>{r.name}</code> → <code>{r.value}</code> (priority {r.priority})</div>)}</div>}
+      <p className="muted">Do not replace another provider's MX records until you're ready to switch incoming mail.</p>
+    </div>
+    {!receiving?.allReady?<button type="button" className="outline-btn" onClick={enableReceiving} disabled={receivingBusy}>{receivingBusy?'Connecting...':receiving?.webhookReady?'Finish receiving setup':'Enable receiving'}</button>:<Check size={20}/>}
+    </div>}
   </div></div>}
   {notificationPanel&&<div className="notification-popover"><div className="notification-top"><strong>Mail notifications</strong><Icon icon={X} title="Close" onClick={()=>setNotificationPanel(false)}/></div>
    <div className="notification-content"><Bell size={21}/><p>{preferences.notifications?'Alerts are enabled for new messages.':'Notifications are currently turned off.'}</p></div>
