@@ -13,7 +13,7 @@
     "react-dom": "19.1.1",
     "@supabase/supabase-js": "2.58.0",
     "lucide-react": "0.468.0",
-    "resend": "6.1.0",
+    "resend": "6.32.1",
     "svix": "1.42.0"
   },
   "devDependencies": {
