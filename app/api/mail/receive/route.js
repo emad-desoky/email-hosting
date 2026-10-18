@@ -2,13 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { Webhook } from 'svix';
 import { Resend } from 'resend';
 import { service } from '../../../../lib/server';
+import { inboundConfiguration } from '../../../../lib/mail-secret';
 
 function rawAddress(value) {
   const v=String(value||'');
   return (v.match(/<([^<>]+@[^<>]+)>/)?.[1]||v).trim().toLowerCase();
 }
 export async function POST(req) {
-  const secret=process.env.RESEND_WEBHOOK_SECRET;
+  let config;
+  try{config=await inboundConfiguration()}catch(e){console.error('Could not load inbound configuration',e);return Response.json({error:'Receiving unavailable'},{status:503})}
+  const secret=config?.signingSecret;
   if(!secret || !process.env.RESEND_API_KEY) {
     console.error('Inbound email is not configured (webhook signing secret missing).');
     return Response.json({error:'Receiving is not configured'},{status:503});
