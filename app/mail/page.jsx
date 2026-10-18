@@ -121,7 +121,27 @@ export default function MailPage(){
  },[]);
  useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('mds-mail-theme',theme)},[theme]);
  useEffect(()=>{if(settings&&userIsAdmin){api('/api/admin/mail/receiving').then(setReceiving).catch(()=>setReceiving(null))}},[settings,userIsAdmin]);
- useEffect(()=>{if(!boxId)return;load(true);const timer=setInterval(()=>{if(!document.hidden)load(false)},18000);return()=>clearInterval(timer)},[load,boxId]);
+ useEffect(()=>{
+  const saved=Number(localStorage.getItem('mds-mail-page-size')||20);
+  if([10,20,40].includes(saved))setPageSize(saved);
+ },[]);
+ useEffect(()=>{localStorage.setItem('mds-mail-page-size',String(pageSize))},[pageSize]);
+ useEffect(()=>{
+   if(!boxId)return;
+   load(true);
+   return()=>{listGeneration.current+=1;listRequest.current?.abort()};
+ },[load]);
+ useEffect(()=>{
+   if(!boxId)return;
+   loadCounts();
+   const timer=setInterval(()=>{if(!document.hidden)loadCounts()},20000);
+   return()=>clearInterval(timer);
+ },[boxId,loadCounts]);
+ useEffect(()=>{
+   if(!boxId)return;
+   const timer=setInterval(()=>{if(!document.hidden)load(false,{background:true})},30000);
+   return()=>clearInterval(timer);
+ },[load,boxId]);
  useEffect(()=>{
    const key=e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();queryRef.current?.focus()}
@@ -131,10 +151,38 @@ export default function MailPage(){
    window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
  },[identity,compose]);
 
- function folderTo(f){setFolder(f);setSelected(null);setPage(0);setQuery('');setTerm('');setMobile(false);setChecked([])}
+ function resetPreview(){
+   setSelected(null);setDetail(null);setDetailLoading(false);
+   detailGeneration.current+=1;setChecked([]);
+ }
+ function folderTo(f){
+   resetPreview();setMobile(false);
+   setFolder(f);setPage(0);setQuery('');setTerm('');
+   displayCached(boxId,f,'',0,pageSize);
+ }
  function switchTo(value){
-  const next=identities.find(i=>i.mailboxId+'|'+i.from===value);
-  if(next){setIdentity(next);setSelected(null);setChecked([]);setPage(0);setList([])}
+   const next=identities.find(i=>i.mailboxId+'|'+i.from===value);
+   if(!next)return;
+   resetPreview();setIdentity(next);setCounts({});setPage(0);
+   displayCached(next.mailboxId,folder,term,0,pageSize);
+ }
+ function changePageSize(value){
+   const size=Number(value);
+   if(![10,20,40].includes(size))return;
+   resetPreview();setPageSize(size);setPage(0);
+   displayCached(boxId,folder,term,0,size);
+ }
+ function goToPage(next){
+   const maxPage=Math.max(0,Math.ceil(total/pageSize)-1);
+   if(next<0||next>maxPage||next===page)return;
+   resetPreview();setPage(next);
+   displayCached(boxId,folder,term,next,pageSize);
+ }
+ function searchMessages(event){
+   event.preventDefault();
+   const value=query.trim();
+   resetPreview();setPage(0);setTerm(value);
+   displayCached(boxId,folder,value,0,pageSize);
  }
  function openCompose(mode='new',mail=null){
   if(!identity)return tell('Your mailbox is loading. Please try again.','error');
@@ -149,18 +197,51 @@ export default function MailPage(){
  }
  async function modify(ids,change){
    if(!ids?.length)return;
+   const idSet=new Set(ids);
+   const snapshot=list;
+   setList(previous=>previous.flatMap(m=>{
+     if(!idSet.has(m.id))return [m];
+     const updated={...m};
+     if(change.read!==undefined)updated.read_at=change.read?new Date().toISOString():null;
+     if(change.starred!==undefined)updated.starred=Boolean(change.starred);
+     if(change.folder!==undefined)updated.folder=change.folder;
+     if(change.folder&&folder!=='all'&&change.folder!==folder)return [];
+     if(folder==='starred'&&change.starred===false)return [];
+     if(folder==='unread'&&change.read===true)return [];
+     return [updated];
+   }));
+   setChecked([]);
+   if(change.folder&&selected&&idSet.has(selected))resetPreview();
    try{
-    await api('/api/mail',{method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({mailboxId:boxId,ids,...change})});
-    setChecked([]);
-    if(change.folder&&selected&&ids.includes(selected))setSelected(null);
-    await load();
-   }catch(e){tell(e.message,'error')}
+     await api('/api/mail',{method:'PATCH',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({mailboxId:boxId,ids,...change})});
+     cache.current.clear();
+     // Fetch the updated page without blocking the click interaction.
+     void load(false,{background:true});
+     void loadCounts();
+   }catch(e){
+     setList(snapshot);tell(e.message,'error');
+   }
  }
  async function openMessage(msg){
-   if(msg.folder==='drafts'){openCompose('draft',msg);return}
-   setSelected(msg.id);
-   if(!msg.read_at)await modify([msg.id],{read:true});
+   const generation=++detailGeneration.current;
+   const qs=new URLSearchParams({mode:'detail',mailbox:boxId,id:msg.id});
+   if(msg.folder==='drafts'){
+     try{
+       const record=await api('/api/mail?'+qs);
+       if(detailGeneration.current===generation&&activeMailbox.current===boxId)openCompose('draft',record.message);
+     }catch(e){if(detailGeneration.current===generation)tell(e.message,'error')}
+     return;
+   }
+   setSelected(msg.id);setDetail(null);setDetailLoading(true);
+   api('/api/mail?'+qs).then(record=>{
+     if(detailGeneration.current===generation&&activeMailbox.current===boxId)setDetail(record.message);
+   }).catch(e=>{
+     if(detailGeneration.current===generation)tell(e.message,'error');
+   }).finally(()=>{
+     if(detailGeneration.current===generation)setDetailLoading(false);
+   });
+   if(!msg.read_at)void modify([msg.id],{read:true});
  }
  async function enableReceiving(){
   setReceivingBusy(true);
@@ -192,7 +273,8 @@ export default function MailPage(){
    setCompose(null);
    if(kind!=='discard'){if(info)tell(info); if(kind==='sent')folderTo('sent');else if(kind==='drafts')folderTo('drafts');}
    else tell('Message discarded.');
-   load();
+   cache.current.clear();
+   void loadCounts();
  };
  const signout=()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>location.assign('/login'));
  const previewHTML=message?.body_html?
