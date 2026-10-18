@@ -46,7 +46,7 @@ export async function POST(req) {
     if(box.used_bytes+approxBytes>box.quota_bytes)
       return Response.json({error:'This mailbox has reached its storage limit. Free some space before sending.'},{status:413});
     const payload={
-      from: requestedFrom,to,subject,
+      from: String(box.display_name||'Medical Digital Solutions').replace(/[<>\"]/g,'').slice(0,60)+' <'+requestedFrom+'>',to,subject,replyTo:requestedFrom,
       ...(cc.length?{cc}:{}),...(bcc.length?{bcc}:{}),
       ...(text?{text}:{}),...(html?{html}:{}),
       ...(input.inReplyTo?{headers:{'In-Reply-To':String(input.inReplyTo).slice(0,250)}}:{})
