@@ -10,3 +10,57 @@
 .login-logo img{width:min(100%,290px);height:auto;object-fit:contain}
 @media(max-width:1100px){.left-rail .brand-logo{max-width:175px}}
 @media(max-width:750px){.left-rail .brand-logo{max-width:205px}}
+
+/* Functional mail enhancements: compose, attachments, errors and preferences */
+.compose-card.compose-large{width:min(1010px,calc(100vw - 28px));height:min(790px,calc(100dvh - 42px))}
+.compose-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(295px,.86fr);flex:1;min-height:0;overflow:hidden}
+.compose-grid.no-preview{display:flex}
+.compose-grid.no-preview .compose-form{flex:1}
+.compose-heading-actions{display:flex;align-items:center;gap:5px}
+.compose-grid .compose-form{min-width:0;overflow:hidden}
+.compose-grid .compose-form>textarea{min-height:160px;white-space:pre-wrap}
+.compose-form .compose-footer{flex-shrink:0}
+.compose-warning{color:#fbbaba;background:#ee64701c;border:1px solid #db68725c;padding:12px 16px;margin:8px 15px;border-radius:10px;font-size:12px;line-height:1.6}
+html[data-theme=light] .compose-warning{color:#a83c40;background:#fcecee;border-color:#f1c3c7}
+.picked-files{display:flex;flex-wrap:wrap;max-height:118px;overflow:auto;gap:7px;padding:10px 15px}
+.picked-file{display:flex;align-items:center;min-width:0;gap:7px;border:1px solid var(--border);background:var(--panel2);border-radius:9px;padding:7px 9px;max-width:100%}
+.picked-file>span{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:145px}
+.picked-file small{color:var(--muted);font-size:10px;white-space:nowrap}
+.picked-file button{background:transparent;border:0;color:var(--muted);padding:3px}
+.uploading{display:flex;align-items:center;gap:6px;color:var(--blue);font-size:11px}
+.spin{animation:mds-spin 1s linear infinite}
+@keyframes mds-spin{to{transform:rotate(360deg)}}
+.live-compose-preview{display:flex;flex-direction:column;min-width:0;overflow-y:auto;background:var(--panel2);border-left:1px solid var(--border);padding:27px}
+.preview-small-label{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--blue);margin-bottom:16px}
+.live-compose-preview h3{overflow-wrap:anywhere;font-size:24px;line-height:1.3;margin:0 0 20px}
+.preview-small-meta{font-size:12px;line-height:1.8;overflow-wrap:anywhere;color:var(--muted)}
+.preview-small-meta strong{color:var(--fg);margin-right:8px}
+.live-compose-preview hr{width:100%;height:1px;border:0;background:var(--border);margin:22px 0}
+.preview-text{font-size:13px;line-height:1.9;color:var(--fg);white-space:pre-wrap;overflow-wrap:anywhere}
+.preview-file-meta{display:flex;gap:7px;margin-top:26px;color:var(--muted);font-size:12px}
+.compose-heading .selected{color:var(--blue)}
+.toast-error{border-color:#e87980;background:var(--panel)}
+.toast-error>svg{color:#ff8d95}
+.toast span{flex:1;line-height:1.5}
+.settings-card .outline-btn.on{border-color:#2aa67b;background:#1c94501a;color:#2bca88}
+.mailbox-chooser .account-readonly{padding:9px 12px;font-size:12px;color:var(--fg);background:var(--panel2);border:1px solid var(--border);border-radius:9px}
+.attachment-downloads{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.attachment-pill small{color:var(--muted);margin-left:7px}
+.attachment-bar strong{font-size:12px}
+.html-frame{width:100%;min-height:450px;border:1px solid var(--border);border-radius:10px;background:#fff}
+@media(max-width:900px) and (min-width:751px){
+ .compose-card.compose-large{width:min(730px,100%);height:min(770px,calc(100dvh - 40px))}
+ .compose-grid{grid-template-columns:minmax(0,1fr) minmax(220px,.75fr)}
+ .live-compose-preview{padding:17px}
+}
+@media(max-width:750px){
+ .compose-card.compose-large{width:100%;height:calc(100dvh - 87px);max-height:none}
+ .compose-grid{display:flex}
+ .compose-grid .compose-form{flex:1}
+ .live-compose-preview{display:none}
+ .compose-grid .compose-form>textarea{min-height:140px}
+ .compose-overlay{align-items:end}
+ .settings-card{max-height:85dvh;overflow:auto;padding:20px}
+ .setting-row{align-items:flex-start;gap:12px}
+ .mailbox-chooser .account-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+}
