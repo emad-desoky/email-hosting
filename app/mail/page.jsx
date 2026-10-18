@@ -1,28 +1,245 @@
 'use client';
-import {useEffect,useState,useRef} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
-import {Inbox,Send,PenLine,Menu,Search,Star,Archive,Trash2,FileText,ShieldAlert,RefreshCw,Settings,LogOut,ChevronLeft,ChevronRight,Sun,Moon,Bell,Reply,Forward,CheckCheck,MailOpen,X,Users,Check,Mail,Printer,Paperclip} from 'lucide-react';
-const folders=[['inbox',Inbox,'Inbox'],['starred',Star,'Starred'],['sent',Send,'Sent'],['drafts',FileText,'Drafts'],['all',Mail,'All mail'],['archive',Archive,'Archive'],['spam',ShieldAlert,'Spam'],['trash',Trash2,'Trash']];
+import Compose from './Compose';
+import {
+ Inbox,Send,PenLine,Menu,Search,Star,Archive,Trash2,NotebookPen,ShieldAlert,
+ RefreshCw,Settings,LogOut,ChevronLeft,ChevronRight,Sun,Moon,Bell,Reply,Forward,
+ CheckCheck,MailOpen,X,Users,Check,Mail,Printer,Paperclip,Save,AlertCircle,Eye,LoaderCircle
+} from 'lucide-react';
+
+const FOLDERS=[['inbox',Inbox,'Inbox'],['starred',Star,'Starred'],['sent',Send,'Sent'],
+ ['drafts',NotebookPen,'Drafts'],['all',Mail,'All mail'],['archive',Archive,'Archive'],
+ ['spam',ShieldAlert,'Spam'],['trash',Trash2,'Trash']];
 const date=v=>new Date(v).toLocaleDateString([],{month:'short',day:'numeric'});
-async function api(url,opt={}){const r=await fetch(url,{cache:'no-store',...opt});if(r.status===401){location.assign('/login');throw Error('Sign in again')}const v=await r.json();if(!r.ok)throw Error(v.error||'Request failed');return v}
-function Icon({component:C,title,onClick}){return <button type="button" className="icon-btn" aria-label={title} title={title} onClick={onClick}><C size={19}/></button>}
+async function api(path,opts={}){
+ let res;
+ try {res=await fetch(path,{cache:'no-store',credentials:'same-origin',...opts})}
+ catch{throw Error('Unable to connect. Check your internet connection and try again.')}
+ if(res.status===401){location.assign('/login');throw Error('Please sign in again.')}
+ let body;try{body=await res.json()}catch{throw Error('The mail service is temporarily unavailable. Please try again.')}
+ if(!res.ok)throw Error(body.error && body.error.length<180 && !body.error.includes('stack')?body.error:'Something went wrong. Please try again.');
+ return body;
+}
+function Icon({icon:Component,title,onClick,active=false,disabled=false}){
+ return <button type="button" className={'icon-btn '+(active?'selected':'')} title={title} aria-label={title} disabled={disabled} onClick={onClick}><Component size={19}/></button>
+}
+function Empty({title,compose}){return <div className="empty-state"><div className="empty-illustration"><Mail size={29}/></div><h3>Nothing in {title.toLowerCase()}</h3><p>Messages will appear here when they are available.</p><button className="outline-btn" onClick={compose}><PenLine size={17}/> Compose</button></div>}
+
 export default function MailPage(){
-const [me,setMe]=useState(null),[folder,setFolder]=useState('inbox'),[box,setBox]=useState(''),[allBoxes,setAllBoxes]=useState([]),[msgs,setMsgs]=useState([]),[selected,setSelected]=useState(null),[draft,setDraft]=useState(null),[counts,setCounts]=useState({}),[mobile,setMobile]=useState(false),[theme,setTheme]=useState('dark'),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[checked,setChecked]=useState([]),[query,setQuery]=useState(''),[term,setTerm]=useState(''),[page,setPage]=useState(0),[settings,setSettings]=useState(false),[notification,setNotification]=useState(false);
-const mailbox=box||me?.id,prevUnread=useRef(null),timer=useRef(null);
-const message=msgs.find(x=>x.id===selected);
-function toast(t){setNotice(t);setTimeout(()=>setNotice(''),4200)}
-async function refresh(f=folder,m=mailbox,t=term,p=page){if(!m)return;try{const [a,b]=await Promise.all([api('/api/mail?folder='+f+'&mailbox='+m+'&page='+p+(t?'&q='+encodeURIComponent(t):'')),api('/api/mail?mode=counts&mailbox='+m)]);setMsgs(a.messages||[]);setCounts(b.counts||{});if(prevUnread.current!==null&&Number(b.counts?.unread)>prevUnread.current){setNotification(true);if('Notification'in window&&Notification.permission==='granted')new Notification('New MDS Mail',{body:'You have received a message'})}prevUnread.current=Number(b.counts?.unread||0)}catch(e){toast(e.message)}}
-useEffect(()=>{setTheme(localStorage.getItem('mds-theme')||'dark');api('/api/me').then(async x=>{setMe(x.user);setBox(x.user.id);if(x.user.role==='admin'){const r=await api('/api/admin/accounts');setAllBoxes((r.accounts||[]).filter(x=>x.status==='active'))}}).catch(e=>toast(e.message))},[]);
-useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('mds-theme',theme)},[theme]);
-useEffect(()=>{if(me)refresh()},[me?.id,folder,box,term,page]);
-useEffect(()=>{if(!me)return;clearInterval(timer.current);timer.current=setInterval(()=>refresh(),20000);return()=>clearInterval(timer.current)},[me?.id,folder,box,term,page]);
-useEffect(()=>{const key=e=>{if(e.key==='Escape'){setSelected(null);setDraft(null);setMobile(false)}if(e.key==='c'&&!['INPUT','TEXTAREA'].includes(e.target.tagName)){start()}};addEventListener('keydown',key);return()=>removeEventListener('keydown',key)},[]);
-function change(f){setFolder(f);setSelected(null);setMobile(false);setPage(0);setTerm('');setQuery('')}
-async function update(ids,changes){try{await api('/api/mail',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,mailboxId:mailbox,...changes})});setChecked([]);if(changes.read!==undefined)setMsgs(v=>v.map(x=>ids.includes(x.id)?{...x,read_at:changes.read?new Date().toISOString():null}:x));else await refresh()}catch(e){toast(e.message)}}
-async function open(x){if(folder==='drafts'){start('draft',x);return}setSelected(x.id);if(!x.read_at)await update([x.id],{read:true})}
-function start(mode='new',x){let d={to:'',subject:'',text:'',cc:'',bcc:'',id:null};if(x){d.subject=(mode==='reply'?'Re: ':mode==='forward'?'Fwd: ':'')+x.subject;d.to=mode==='reply'?x.sender:mode==='draft'?x.recipients.join(', '):'';d.text=mode==='draft'?x.body_text||'':'\n\n----- Previous message -----\n'+(x.body_text||'');d.id=mode==='draft'?x.id:null}setDraft(d);setSelected(null);setMobile(false)}
-async function send(e){e.preventDefault();setBusy(true);try{const d=await api('/api/mail/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mailboxId:mailbox,to:draft.to.split(',').map(x=>x.trim()).filter(Boolean),cc:draft.cc.split(',').map(x=>x.trim()).filter(Boolean),bcc:draft.bcc.split(',').map(x=>x.trim()).filter(Boolean),subject:draft.subject,text:draft.text})});setDraft(null);toast(d.warning||'Message sent');refresh()}catch(e){toast(e.message)}finally{setBusy(false)}}
-async function saveDraft(){if(!draft)return;try{await api('/api/mail/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mailboxId:mailbox,...draft})});toast('Draft saved');setDraft(null);refresh()}catch(e){toast(e.message)}}
-const label=folders.find(x=>x[0]===folder)?.[2]||folder,unread=counts.unread||0;
-return <div className="app-shell"><aside className={'left-rail '+(mobile?'mobile-open':'')}><div className="brand-wrap"><img className="brand-logo" src="/mds-logo.png" alt="Medical Digital Solutions"/><div className="brand-text"><strong>Medical Digital</strong><span>Solutions · Mail</span></div></div><div className="rail-separator"/><button className="compose-cta" onClick={()=>start()}><PenLine size={20}/> Compose <span className="compose-plus">+</span></button><div className="nav-label">YOUR WORKSPACE</div><nav className="folder-nav">{folders.map(([f,C,l])=><button key={f} className={'folder-item '+(folder===f?'active':'')} onClick={()=>change(f)}><C size={19}/><span>{l}</span>{f==='inbox'&&unread>0&&<em>{unread}</em>}</button>)}</nav><div className="rail-divider"/>{me?.role==='admin'&&<Link href="/admin" className="folder-item admin-link"><Users size={19}/><span>Admin console</span></Link>}<button className="folder-item" onClick={()=>{setSettings(true);setMobile(false)}}><Settings size={19}/><span>Settings</span></button><div className="rail-bottom"><div className="storage-head"><span>Storage usage</span><span>{(Number(me?.used_bytes||0)/1048576).toFixed(1)}MB / {(Number(me?.quota_bytes||0)/1073741824).toFixed(1)}GB</span></div><div className="storage-track"><span style={{width:Math.min(100,100*(Number(me?.used_bytes||0)/Math.max(1,Number(me?.quota_bytes||1))))+'%'}}/></div><div className="rail-account"><div className="avatar">{(me?.display_name||'M')[0]}</div><div><strong>{me?.display_name||'MDS Administrator'}</strong><small>{me?.sender_email||me?.email}</small></div><Icon component={LogOut} title="Sign out" onClick={()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>location.assign('/login'))}/></div></div></aside>{mobile&&<button className="nav-scrim" onClick={()=>setMobile(false)}/>}<section className="workspace"><header className="topbar"><div className="top-title"><div className="eyebrow">MEDICAL DIGITAL SOLUTIONS <span className="dot"/> BUSINESS MAIL</div><h1>Your <span className="title-gradient">workspace.</span></h1><p>Everything you need for better conversations.</p></div><div className="top-actions"><div className="searchbox"><Search size={19}/><form onSubmit={e=>{e.preventDefault();setTerm(query);setPage(0)}}><input placeholder="Search mail..." value={query} onChange={e=>setQuery(e.target.value)}/></form><kbd>ENTER</kbd></div><Icon component={theme==='dark'?Sun:Moon} title="Change theme" onClick={()=>setTheme(theme==='dark'?'light':'dark')}/><Icon component={Bell} title="Notifications" onClick={()=>{setNotification(v=>!v);if('Notification'in window&&Notification.permission==='default')Notification.requestPermission()}}/><div className="profile-initial">{(me?.display_name||'M')[0]}</div></div></header>{me?.role==='admin'&&allBoxes.length>0&&<div className="mailbox-chooser"><span>Current mailbox</span><select value={mailbox} onChange={e=>{setBox(e.target.value);setSelected(null)}}>{allBoxes.map(x=><option key={x.id} value={x.id}>{x.email===me.email?(me.sender_email||me.email)+' · Me':x.email}</option>)}</select><span className="identity-badge">CONNECTED</span></div>}<div className="workboard"><div className="messages-panel"><div className="panel-heading"><div><span className="section-kicker">YOUR MESSAGES</span><h2>{label} <span className="heading-count">{folder==='inbox'?unread:msgs.length}</span></h2></div><div className="heading-actions"><Icon component={RefreshCw} title="Refresh messages" onClick={()=>refresh()}/></div></div><div className="mail-filters"><button className={'filter-chip '+(folder!=='unread'?'active':'')} onClick={()=>change('inbox')}>All</button><button className={'filter-chip '+(folder==='unread'?'active':'')} onClick={()=>change('unread')}>Unread</button><button className="filter-chip" onClick={()=>change('starred')}>Starred</button><span className="row-count">{msgs.length} messages</span></div>{checked.length>0&&<div className="bulkbar"><span>{checked.length} selected</span><Icon component={MailOpen} title="Mark read" onClick={()=>update(checked,{read:true})}/><Icon component={CheckCheck} title="Mark unread" onClick={()=>update(checked,{read:false})}/><Icon component={Archive} title="Archive" onClick={()=>update(checked,{folder:'archive'})}/><Icon component={Trash2} title="Trash" onClick={()=>update(checked,{folder:'trash'})}/></div>}<div className="messages-scroll">{msgs.length?msgs.map(x=><div key={x.id} className={'message-item '+(selected===x.id?'chosen ':'')+(!x.read_at?'unseen':'')}><label className="check-area"><input type="checkbox" checked={checked.includes(x.id)} onChange={()=>setChecked(v=>v.includes(x.id)?v.filter(y=>y!==x.id):[...v,x.id])}/></label><button className="message-open" onClick={()=>open(x)}><div className="message-line"><div className="sender-avatar">{(x.sender||'M')[0].toUpperCase()}</div><strong>{folder==='sent'?x.recipients?.[0]:x.sender}</strong><time>{date(x.received_at)}</time></div><div className="subject-line">{x.subject||'(No subject)'}</div><p>{(x.body_text||'HTML message').replace(/\s+/g,' ').slice(0,100)}</p></button><button className={'star-button '+(x.starred?'is-starred':'')} onClick={()=>update([x.id],{starred:!x.starred})}><Star size={17} fill={x.starred?'currentColor':'none'}/></button></div>):<div className="empty-state"><div className="empty-illustration"><Mail size={30}/></div><h3>Your {label.toLowerCase()} is clear</h3><p>Incoming and sent messages will appear here.</p><button className="outline-btn" onClick={()=>start()}><PenLine size={17}/> Compose email</button></div>}</div><div className="messages-bottom"><span>{msgs.length} messages</span><div><Icon component={ChevronLeft} title="Previous page" onClick={()=>setPage(Math.max(0,page-1))}/><Icon component={ChevronRight} title="Next page" onClick={()=>setPage(page+1)}/></div></div></div><section className={'preview-panel '+(message?'preview-open':'')}><div className="preview-header"><span className="section-kicker">MESSAGE PREVIEW</span>{message&&<div className="preview-actions"><Icon component={Printer} title="Print" onClick={()=>window.print()}/><Icon component={X} title="Close preview" onClick={()=>setSelected(null)}/></div>}</div>{message?<article className="preview-content"><div className="preview-subject"><div className="eyebrow">CONVERSATION</div><h2>{message.subject||'(No subject)'}</h2><div className="preview-meta">{new Date(message.received_at).toLocaleString()}</div></div><div className="sender-card"><div className="sender-avatar large">{message.sender[0]?.toUpperCase()}</div><div><strong>{message.sender}</strong><small>To {message.recipients?.join(', ')}</small></div></div><div className="mail-body"><div className="plain-email">{message.body_text||'HTML-only message (preview unavailable).'}</div></div><div className="preview-footer"><button className="primary-button" onClick={()=>start('reply',message)}><Reply size={17}/>Reply</button><button className="outline-btn" onClick={()=>start('forward',message)}><Forward size={17}/>Forward</button><button className="outline-btn" onClick={()=>update([message.id],{folder:'archive'})}><Archive size={17}/>Archive</button><button className="outline-btn" onClick={()=>update([message.id],{folder:'trash'})}><Trash2 size={17}/></button></div></article>:<div className="preview-empty"><div className="preview-art"><Mail size={56}/></div><span className="preview-empty-eyebrow">YOUR READING SPACE</span><h3>Make room for clarity.</h3><p>Select a message to preview it here, or compose a new conversation.</p><button className="outline-btn" onClick={()=>start()}><PenLine size={17}/> Write a message</button></div>}</section></div></section><nav className="mobile-bottom"><button className={folder==='inbox'?'active':''} onClick={()=>change('inbox')}><Inbox size={23}/><span>Inbox</span></button><button className={folder==='sent'?'active':''} onClick={()=>change('sent')}><Send size={23}/><span>Sent</span></button><button onClick={()=>start()}><PenLine size={23}/><span>Compose</span></button><button onClick={()=>setMobile(v=>!v)}><Menu size={23}/><span>More</span></button></nav>{draft&&<div className="compose-overlay"><div className="compose-card"><div className="compose-heading"><span><PenLine size={18}/> New message</span><Icon component={X} title="Save draft and close" onClick={saveDraft}/></div><form className="compose-form" onSubmit={send}><label>From <input disabled value={allBoxes.find(x=>x.id===mailbox)?.sender_email||me?.sender_email||me?.email||''}/></label><label>To <input required autoFocus value={draft.to} onChange={e=>setDraft({...draft,to:e.target.value})} placeholder="Recipient email, or multiple separated by commas"/></label><label>CC <input value={draft.cc} onChange={e=>setDraft({...draft,cc:e.target.value})}/></label><label>BCC <input value={draft.bcc} onChange={e=>setDraft({...draft,bcc:e.target.value})}/></label><input className="subject-input" placeholder="Subject" value={draft.subject} onChange={e=>setDraft({...draft,subject:e.target.value})}/><textarea placeholder="Write your message..." value={draft.text} onChange={e=>setDraft({...draft,text:e.target.value})}/><div className="compose-footer"><div><button type="submit" disabled={busy} className="primary-button"><Send size={17}/>{busy?'Sending...':'Send message'}</button><Icon component={FileText} title="Save draft" onClick={saveDraft}/></div><Icon component={Trash2} title="Discard" onClick={()=>setDraft(null)}/></div></form></div></div>}{settings&&<div className="settings-shade" onClick={()=>setSettings(false)}><div className="settings-card" onClick={e=>e.stopPropagation()}><div className="settings-head"><h2>Workspace settings</h2><Icon component={X} title="Close" onClick={()=>setSettings(false)}/></div><div className="setting-row"><strong>Appearance</strong><button className="outline-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?'Light mode':'Dark mode'}</button></div><div className="setting-row"><strong>Desktop notifications</strong><button className="outline-btn" onClick={()=>'Notification'in window&&Notification.requestPermission()}>Enable</button></div></div></div>}{notification&&<div className="notification-popover"><div className="notification-top"><strong>Notifications</strong><Icon component={X} title="Close" onClick={()=>setNotification(false)}/></div><div className="notification-content"><Bell size={22}/><p>You've received a new email. Open your inbox to view it.</p></div><button className="outline-btn" onClick={()=>{change('inbox');setNotification(false)}}>Open inbox</button></div>}{notice&&<div className="toast"><Check size={17}/>{notice}<button onClick={()=>setNotice('')}><X size={14}/></button></div>}</div>
+ const [user,setUser]=useState(null),[identities,setIdentities]=useState([]),[identity,setIdentity]=useState(null);
+ const [folder,setFolder]=useState('inbox'),[list,setList]=useState([]),[counts,setCounts]=useState({});
+ const [selected,setSelected]=useState(null),[checked,setChecked]=useState([]),[compose,setCompose]=useState(null);
+ const [term,setTerm]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false);
+ const [theme,setTheme]=useState('dark'),[mobile,setMobile]=useState(false),[settings,setSettings]=useState(false);
+ const [notificationPanel,setNotificationPanel]=useState(false),[preferences,setPreferences]=useState({notifications:false}),[preferenceBusy,setPreferenceBusy]=useState(false);
+ const [notice,setNotice]=useState(null),[loading,setLoading]=useState(true);
+ const lastUnread=useRef(new Map()),queryRef=useRef(null),toastTimer=useRef(null);
+ const boxId=identity?.mailboxId,userIsAdmin=user?.role==='admin'&&user.email==='mds2026@mds-healthcare.com';
+ const message=list.find(m=>m.id===selected),unread=Number(counts.unread||0);
+ const tell=(message,kind='success')=>{setNotice({message,kind});clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setNotice(null),5000)};
+ const load=useCallback(async(showToast=false)=>{
+  if(!boxId)return;
+  try{
+   const qs=new URLSearchParams({mailbox:boxId,folder,page:String(page)});
+   if(term)qs.set('q',term);
+   const [m,c]=await Promise.all([api('/api/mail?'+qs),api('/api/mail?mode=counts&mailbox='+boxId)]);
+   setList(m.messages||[]);setHasMore(Boolean(m.hasMore));setCounts(c.counts||{});
+   const count=Number(c.counts?.unread||0),before=lastUnread.current.get(boxId);
+   if(before!==undefined && count>before && preferences.notifications){
+    tell(count-before===1?'You have a new email.':'You have '+(count-before)+' new emails.');
+    if(typeof Notification!=='undefined'&&Notification.permission==='granted')
+       new Notification('MDS Mail',{body:'New mail received in your inbox.'});
+   }
+   lastUnread.current.set(boxId,count);
+  }catch(e){if(showToast)tell(e.message,'error')}
+  finally{setLoading(false)}
+ },[boxId,folder,term,page,preferences.notifications]);
+
+ useEffect(()=>{
+  if(typeof window!=='undefined')setTheme(localStorage.getItem('mds-mail-theme')||'dark');
+  Promise.all([api('/api/me'),api('/api/mail/identities')]).then(([m,ids])=>{
+    setUser(m.user);setPreferences(m.user.preferences||{notifications:false});
+    setIdentities(ids.identities||[]);
+    const initial=(ids.identities||[]).find(x=>x.mailboxId===m.user.id&&x.from===(m.user.sender_email||m.user.email))||
+       (ids.identities||[]).find(x=>x.mailboxId===m.user.id);
+    if(initial)setIdentity(initial);
+    else tell('Your mailbox is not yet configured. Please contact your administrator.','error');
+  }).catch(e=>tell(e.message,'error'));
+  return()=>clearTimeout(toastTimer.current)
+ },[]);
+ useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('mds-mail-theme',theme)},[theme]);
+ useEffect(()=>{if(!boxId)return;load(true);const timer=setInterval(()=>{if(!document.hidden)load(false)},18000);return()=>clearInterval(timer)},[load,boxId]);
+ useEffect(()=>{
+   const key=e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();queryRef.current?.focus()}
+    if(e.key==='Escape'){setCompose(null);setSelected(null);setMobile(false);setSettings(false)}
+    if(e.key.toLowerCase()==='c'&&!['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)&&!compose){openCompose()}
+   };
+   window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)
+ },[identity,compose]);
+
+ function folderTo(f){setFolder(f);setSelected(null);setPage(0);setQuery('');setTerm('');setMobile(false);setChecked([])}
+ function switchTo(value){
+  const next=identities.find(i=>i.mailboxId+'|'+i.from===value);
+  if(next){setIdentity(next);setSelected(null);setChecked([]);setPage(0);setList([])}
+ }
+ function openCompose(mode='new',mail=null){
+  if(!identity)return tell('Your mailbox is loading. Please try again.','error');
+  if(mode==='draft')setCompose(mail);
+  else if(mail){
+   const label=mode==='reply'?'Re: ':'Fwd: ';
+   const recipient=mode==='reply'?mail.sender:'';
+   setCompose({recipients:recipient?[recipient]:[],cc:[],bcc:[],subject:label+(mail.subject||''),
+     body_text:'\n\n----- Original message -----\nFrom: '+mail.sender+'\n\n'+(mail.body_text||'')});
+  }else setCompose({});
+  setSelected(null);setMobile(false);
+ }
+ async function modify(ids,change){
+   if(!ids?.length)return;
+   try{
+    await api('/api/mail',{method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mailboxId:boxId,ids,...change})});
+    setChecked([]);
+    if(change.folder&&selected&&ids.includes(selected))setSelected(null);
+    await load();
+   }catch(e){tell(e.message,'error')}
+ }
+ async function openMessage(msg){
+   if(msg.folder==='drafts'){openCompose('draft',msg);return}
+   setSelected(msg.id);
+   if(!msg.read_at)await modify([msg.id],{read:true});
+ }
+ async function toggleNotifs(){
+  if(preferenceBusy)return;
+  const enable=!Boolean(preferences.notifications);
+  setPreferenceBusy(true);
+  try{
+   let permission='';
+   if(enable&&typeof Notification!=='undefined'&&Notification.permission==='default')
+     permission=await Notification.requestPermission();
+   else if(enable&&typeof Notification!=='undefined')permission=Notification.permission;
+   const out=await api('/api/me/preferences',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({notifications:enable})});
+   setPreferences(out.preferences);
+   if(!enable)tell('Email notifications are now turned off.');
+   else if(permission==='denied')tell('In-app alerts are on. Allow notifications in your browser settings to get desktop alerts.');
+   else tell('Email notifications enabled.');
+  }catch(e){tell(e.message,'error')}finally{setPreferenceBusy(false)}
+ }
+ const currentFolder=FOLDERS.find(x=>x[0]===folder)?.[2]||'Unread';
+ const finishCompose=(kind,info)=>{
+   setCompose(null);
+   if(kind!=='discard'){if(info)tell(info); if(kind==='sent')folderTo('sent');else if(kind==='drafts')folderTo('drafts');}
+   else tell('Message discarded.');
+   load();
+ };
+ const signout=()=>fetch('/api/auth/logout',{method:'POST'}).finally(()=>location.assign('/login'));
+ const previewHTML=message?.body_html?
+  '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; img-src data:; style-src &#39;unsafe-inline&#39;; font-src data:;">'
+   +'<style>body{font:14px/1.75 system-ui,Arial;color:#17212d;overflow-wrap:anywhere}img{max-width:100%}</style>'+message.body_html:'';
+
+ return <div className="app-shell">
+  <aside className={'left-rail '+(mobile?'mobile-open':'')}>
+    <div className="brand-wrap"><img src="/mds-logo.png" className="brand-logo" alt="Medical Digital Solutions" /></div>
+    <div className="rail-separator"/>
+    <button className="compose-cta" onClick={()=>openCompose()}><PenLine size={20}/> Compose <span className="compose-plus">+</span></button>
+    <div className="nav-label">YOUR WORKSPACE</div>
+    <nav className="folder-nav">{FOLDERS.map(([name,C,title])=><button key={name} className={'folder-item '+(folder===name?'active':'')} onClick={()=>folderTo(name)}>
+      <C size={19}/><span>{title}</span>{name==='inbox'&&unread>0&&<em>{unread}</em>}
+    </button>)}</nav>
+    <div className="rail-divider"/>
+    {userIsAdmin&&<Link href="/admin" className="folder-item admin-link"><Users size={19}/><span>Admin console</span></Link>}
+    <button className="folder-item" onClick={()=>{setSettings(true);setMobile(false)}}><Settings size={19}/><span>Settings</span></button>
+    <div className="rail-bottom"><div className="storage-head"><span>Storage</span><span>{(Number(user?.used_bytes||0)/1048576).toFixed(1)} MB / {(Number(user?.quota_bytes||0)/1073741824).toFixed(1)} GB</span></div>
+    <div className="storage-track"><span style={{width:Math.min(100,100*Number(user?.used_bytes||0)/Math.max(1,Number(user?.quota_bytes||1)))+'%'}}/></div>
+    <div className="rail-account"><div className="avatar">{(user?.display_name||'M')[0]}</div><div><strong>{user?.display_name||'MDS Mail'}</strong><small>{user?.email}</small></div>
+    <Icon icon={LogOut} title="Sign out" onClick={signout}/></div></div>
+  </aside>
+  {mobile&&<button className="nav-scrim" aria-label="Close menu" onClick={()=>setMobile(false)}/>}
+  <section className="workspace">
+   <header className="topbar"><div className="top-title"><div className="eyebrow">MEDICAL DIGITAL SOLUTIONS · BUSINESS MAIL</div>
+    <h1>Your <span className="title-gradient">workspace.</span></h1><p>Stay connected, with clarity.</p></div>
+    <div className="top-actions"><div className="searchbox"><Search size={19}/><form onSubmit={e=>{e.preventDefault();setTerm(query.trim());setPage(0)}}>
+      <input ref={queryRef} placeholder="Search mail..." aria-label="Search mail" value={query} onChange={e=>setQuery(e.target.value)}/></form><kbd>⌘K</kbd></div>
+      <Icon icon={theme==='dark'?Sun:Moon} title="Change appearance" onClick={()=>setTheme(theme==='dark'?'light':'dark')}/>
+      <Icon icon={Bell} title="Notifications" active={preferences.notifications} onClick={()=>setNotificationPanel(v=>!v)}/>
+      <div className="profile-initial">{(user?.display_name||'M')[0]}</div>
+    </div>
+   </header>
+   <div className="mailbox-chooser"><span>{userIsAdmin?'Send and read as':'Signed in as'}</span>
+   {userIsAdmin?<select aria-label="Select mail account" value={identity?identity.mailboxId+'|'+identity.from:''} onChange={e=>switchTo(e.target.value)}>
+     {identities.map(i=><option key={i.mailboxId+'|'+i.from} value={i.mailboxId+'|'+i.from}>{i.from}</option>)}
+    </select>:<span className="account-readonly">{identity?.from||user?.email||'Loading...'}</span>}
+    <span className="identity-badge">PRIVATE WORKSPACE</span>
+   </div>
+   <div className="workboard">
+    <div className="messages-panel">
+     <div className="panel-heading"><div><span className="section-kicker">YOUR MESSAGES</span><h2>{currentFolder} <span className="heading-count">{folder==='inbox'?unread:list.length}</span></h2></div>
+       <div className="heading-actions"><Icon icon={RefreshCw} title="Refresh inbox" onClick={()=>load(true)}/></div></div>
+     <div className="mail-filters"><button className={'filter-chip '+(folder==='inbox'?'active':'')} onClick={()=>folderTo('inbox')}>All</button>
+       <button className={'filter-chip '+(folder==='unread'?'active':'')} onClick={()=>folderTo('unread')}>Unread</button>
+       <button className={'filter-chip '+(folder==='starred'?'active':'')} onClick={()=>folderTo('starred')}>Starred</button>
+       <span className="row-count">{list.length} messages</span></div>
+     {checked.length>0&&<div className="bulkbar"><span>{checked.length} selected</span>
+       <Icon icon={MailOpen} title="Mark as read" onClick={()=>modify(checked,{read:true})}/>
+       <Icon icon={CheckCheck} title="Mark unread" onClick={()=>modify(checked,{read:false})}/>
+       <Icon icon={Archive} title="Archive" onClick={()=>modify(checked,{folder:'archive'})}/>
+       <Icon icon={Trash2} title="Move to Trash" onClick={()=>modify(checked,{folder:'trash'})}/>
+       <Icon icon={X} title="Cancel selection" onClick={()=>setChecked([])}/></div>}
+     <div className="messages-scroll">
+       {!loading&&list.length===0?<Empty title={currentFolder} compose={()=>openCompose()}/>:list.map(m=><div key={m.id} className={'message-item '+(selected===m.id?'chosen ':'')+(!m.read_at?'unseen':'')}>
+         <label className="check-area"><input type="checkbox" aria-label={'Select '+m.subject} checked={checked.includes(m.id)} onChange={()=>setChecked(s=>s.includes(m.id)?s.filter(id=>id!==m.id):[...s,m.id])}/></label>
+         <button className="message-open" onClick={()=>openMessage(m)}><div className="message-line"><span className="sender-avatar">{(m.sender||'M')[0].toUpperCase()}</span><strong>{m.direction==='outgoing'?m.recipients?.[0]:m.sender}</strong><time>{date(m.received_at)}</time></div>
+          <div className="subject-line">{m.subject||'(No subject)'}{m.attachments?.length>0&&<Paperclip size={14}/>}</div>
+          <p>{(m.body_text||'HTML message').replace(/\s+/g,' ').slice(0,100)}</p></button>
+         <button className={'star-button '+(m.starred?'is-starred':'')} aria-label={m.starred?'Remove star':'Star'} onClick={()=>modify([m.id],{starred:!m.starred})}><Star size={18} fill={m.starred?'currentColor':'none'}/></button>
+       </div>)}
+       {loading&&list.length===0&&<div className="empty-state"><LoaderCircle className="spin" size={28}/><p>Loading your mail...</p></div>}
+     </div>
+     <div className="messages-bottom"><span>{list.length} messages</span><div><Icon icon={ChevronLeft} title="Previous page" disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}/>
+       <Icon icon={ChevronRight} title="Next page" disabled={!hasMore} onClick={()=>setPage(p=>p+1)}/></div></div>
+    </div>
+    <section className={'preview-panel '+(message?'preview-open':'')}>
+     <div className="preview-header"><span className="section-kicker">MESSAGE PREVIEW</span>{message&&<div className="preview-actions"><Icon icon={Printer} title="Print" onClick={()=>window.print()}/><Icon icon={X} title="Close preview" onClick={()=>setSelected(null)}/></div>}</div>
+     {message?<article className="preview-content">
+       <div className="preview-subject"><span className="eyebrow">CONVERSATION</span><h2>{message.subject||'(No subject)'}</h2><div className="preview-meta">{new Date(message.received_at).toLocaleString()}</div></div>
+       <div className="sender-card"><div className="sender-avatar large">{message.sender?.[0]?.toUpperCase()||'M'}</div><div><strong>{message.sender}</strong><small>To: {message.recipients?.join(', ')}</small>
+         {message.cc?.length>0&&<small>CC: {message.cc.join(', ')}</small>}</div></div>
+       <div className="mail-body">{message.body_text?<div className="plain-email">{message.body_text}</div>:
+        message.body_html?<iframe title="Email HTML content" className="html-frame" sandbox="" referrerPolicy="no-referrer" srcDoc={previewHTML}/>:
+        <p className="muted">This email has no message body.</p>}</div>
+       {message.attachments?.length>0&&<div className="attachment-bar"><strong>Attachments</strong><div className="attachment-downloads">{message.attachments.map(a=><a key={a.id} className="attachment-pill" href={'/api/mail/attachments/'+a.id}><Paperclip size={16}/>{a.filename}<small>{(a.size_bytes/1048576).toFixed(2)} MB</small></a>)}</div></div>}
+       <div className="preview-footer"><button className="primary-button" onClick={()=>openCompose('reply',message)}><Reply size={17}/> Reply</button>
+        <button className="outline-btn" onClick={()=>openCompose('forward',message)}><Forward size={17}/> Forward</button>
+        <button className="outline-btn" onClick={()=>modify([message.id],{folder:'archive'})}><Archive size={17}/> Archive</button>
+        <button className="outline-btn" onClick={()=>modify([message.id],{read:!message.read_at})}>{message.read_at?<Mail size={17}/>:<MailOpen size={17}/>} {message.read_at?'Mark unread':'Mark read'}</button>
+        <Icon icon={Trash2} title="Move to Trash" onClick={()=>modify([message.id],{folder:'trash'})}/>
+       </div>
+     </article>:<div className="preview-empty"><div className="preview-art"><Mail size={56}/></div><span className="preview-empty-eyebrow">YOUR READING SPACE</span><h3>Make room for clarity.</h3><p>Select a message to preview it here, or compose a new one.</p>
+       <button className="outline-btn" onClick={()=>openCompose()}><PenLine size={17}/> Write a message</button></div>}
+    </section>
+   </div>
+  </section>
+  <nav className="mobile-bottom" aria-label="Mobile navigation"><button className={folder==='inbox'?'active':''} onClick={()=>folderTo('inbox')}><Inbox size={22}/><span>Inbox</span></button>
+    <button className={folder==='sent'?'active':''} onClick={()=>folderTo('sent')}><Send size={22}/><span>Sent</span></button>
+    <button onClick={()=>openCompose()}><PenLine size={22}/><span>Compose</span></button>
+    <button onClick={()=>setMobile(v=>!v)}><Menu size={22}/><span>More</span></button>
+  </nav>
+  {compose&&<Compose key={compose.id||'new'} initial={compose} identity={identity} finish={finishCompose} alert={tell}/>}
+  {settings&&<div className="settings-shade" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false)}}><div className="settings-card" role="dialog" aria-modal="true" aria-label="Workspace settings">
+    <div className="settings-head"><h2>Workspace settings</h2><Icon icon={X} title="Close" onClick={()=>setSettings(false)}/></div>
+    <div className="setting-row"><div><strong>Appearance</strong><p>Switch between light and dark mode.</p></div>
+      <button className="outline-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>} {theme==='dark'?'Light mode':'Dark mode'}</button></div>
+    <div className="setting-row"><div><strong>New email notifications</strong><p>{preferences.notifications?'Enabled: you will be notified about new messages.':'Disabled: no new-mail alerts will appear.'}</p></div>
+      <button className={'outline-btn '+(preferences.notifications?'on':'')} onClick={toggleNotifs} disabled={preferenceBusy}>
+       <Bell size={16}/>{preferenceBusy?'Saving...':preferences.notifications?'Disable':'Enable'}</button></div>
+    <div className="setting-row"><div><strong>Signed-in account</strong><p>{user?.email}</p></div><Check size={20}/></div>
+  </div></div>}
+  {notificationPanel&&<div className="notification-popover"><div className="notification-top"><strong>Mail notifications</strong><Icon icon={X} title="Close" onClick={()=>setNotificationPanel(false)}/></div>
+   <div className="notification-content"><Bell size={21}/><p>{preferences.notifications?'Alerts are enabled for new messages.':'Notifications are currently turned off.'}</p></div>
+   <button className="outline-btn" onClick={toggleNotifs} disabled={preferenceBusy}>{preferences.notifications?'Turn off notifications':'Enable notifications'}</button></div>}
+  {notice&&<div role={notice.kind==='error'?'alert':'status'} className={'toast '+(notice.kind==='error'?'toast-error':'')}>
+    {notice.kind==='error'?<AlertCircle size={18}/>:<Check size={18}/>}<span>{notice.message}</span>
+    <button title="Dismiss" aria-label="Dismiss" onClick={()=>setNotice(null)}><X size={15}/></button></div>}
+ </div>
 }
