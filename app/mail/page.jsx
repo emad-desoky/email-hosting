@@ -204,6 +204,8 @@ export default function MailPage(){
    const timer=setInterval(()=>{if(!document.hidden)load(false,{background:true})},30000);
    return()=>clearInterval(timer);
  },[load,boxId]);
+ useEffect(()=>{const update=()=>setDesktopPermission(typeof Notification==='undefined'?'unsupported':Notification.permission);update();window.addEventListener('focus',update);return()=>window.removeEventListener('focus',update)},[]);
+ useEffect(()=>{if(!boxId||!user?.id)return;void checkNewMail();const id=setInterval(checkNewMail,10000);const focus=()=>{if(!document.hidden)void checkNewMail()};document.addEventListener('visibilitychange',focus);return()=>{clearInterval(id);document.removeEventListener('visibilitychange',focus)}},[boxId,user?.id,checkNewMail]);
  useEffect(()=>{
    const key=e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();queryRef.current?.focus()}
