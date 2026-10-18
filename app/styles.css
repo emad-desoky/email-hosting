@@ -64,3 +64,15 @@ html[data-theme=light] .compose-warning{color:#a83c40;background:#fcecee;border-
  .setting-row{align-items:flex-start;gap:12px}
  .mailbox-chooser .account-readonly{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
 }
+
+/* Admin Resend receiving diagnostics */
+.inbound-status{align-items:flex-start}
+.inbound-details{flex:1;min-width:0;overflow-wrap:anywhere}
+.inbound-status .outline-btn{flex-shrink:0;margin-top:12px}
+.inbound-status b{color:var(--fg);font-weight:650}
+.inbound-status p{line-height:1.55}
+.inbound-alert{padding:9px 11px;background:#eb7d7823;color:#ff9994;border:1px solid #da777b66;border-radius:8px}
+.inbound-mx-records{font-size:11px;color:var(--fg);padding:10px;background:var(--panel2);border-radius:8px;margin:10px 0;overflow-wrap:anywhere}
+.inbound-mx-records>div{padding:4px 0;line-height:1.5}
+.inbound-mx-records code{font-size:10px;overflow-wrap:anywhere}
+@media(max-width:750px){.inbound-status{flex-direction:column}.inbound-status .outline-btn{margin-top:4px;max-width:100%}}
