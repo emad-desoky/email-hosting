@@ -43,6 +43,8 @@ export default function MailPage(){
  activeMailbox.current=boxId;
  const message=selected?(detail?.id===selected?detail:list.find(m=>m.id===selected)):null;
  const unread=Number(counts.unread||0);
+ const viewToken=JSON.stringify([boxId,folder,term,page,pageSize]);
+ const visibleView=useRef(viewToken);visibleView.current=viewToken;
  const tell=(message,kind='success')=>{setNotice({message,kind});clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setNotice(null),5000)};
 
  // Every result is scoped to a mailbox, folder, search, page, and page size.
@@ -63,6 +65,7 @@ export default function MailPage(){
    const controller=new AbortController();
    listRequest.current=controller;
    const key=pageKey(boxId,folder,term,page,pageSize);
+   if(visibleView.current!==key)return;
    const cached=cache.current.get(key);
    if(!background){
      if(cached){
@@ -76,7 +79,7 @@ export default function MailPage(){
    if(term)qs.set('q',term);
    try{
      const data=await api('/api/mail?'+qs.toString(),{signal:controller.signal});
-     if(controller.signal.aborted||listGeneration.current!==generation)return;
+     if(controller.signal.aborted||listGeneration.current!==generation||visibleView.current!==key)return;
      const entry={messages:data.messages||[],total:Number(data.total||0),hasMore:Boolean(data.hasMore)};
      cache.current.set(key,entry);
      if(cache.current.size>45)cache.current.delete(cache.current.keys().next().value);
@@ -211,6 +214,7 @@ export default function MailPage(){
      return [updated];
    }));
    setChecked([]);
+   if(detail&&idSet.has(detail.id))setDetail(previous=>previous?{...previous,...(change.read!==undefined?{read_at:change.read?new Date().toISOString():null}:{}),...(change.starred!==undefined?{starred:Boolean(change.starred)}:{}),...(change.folder!==undefined?{folder:change.folder}:{})}:previous);
    if(change.folder&&selected&&idSet.has(selected))resetPreview();
    try{
      await api('/api/mail',{method:'PATCH',headers:{'Content-Type':'application/json'},
@@ -302,7 +306,7 @@ export default function MailPage(){
   <section className="workspace">
    <header className="topbar"><div className="top-title"><div className="eyebrow">MEDICAL DIGITAL SOLUTIONS · BUSINESS MAIL</div>
     <h1>Your <span className="title-gradient">workspace.</span></h1><p>Stay connected, with clarity.</p></div>
-    <div className="top-actions"><div className="searchbox"><Search size={19}/><form onSubmit={e=>{e.preventDefault();setTerm(query.trim());setPage(0)}}>
+    <div className="top-actions"><div className="searchbox"><Search size={19}/><form onSubmit={searchMessages}>
       <input ref={queryRef} placeholder="Search mail..." aria-label="Search mail" value={query} onChange={e=>setQuery(e.target.value)}/></form><kbd>⌘K</kbd></div>
       <Icon icon={theme==='dark'?Sun:Moon} title="Change appearance" onClick={()=>setTheme(theme==='dark'?'light':'dark')}/>
       <Icon icon={Bell} title="Notifications" active={preferences.notifications} onClick={()=>setNotificationPanel(v=>!v)}/>
@@ -317,12 +321,12 @@ export default function MailPage(){
    </div>
    <div className="workboard">
     <div className="messages-panel">
-     <div className="panel-heading"><div><span className="section-kicker">YOUR MESSAGES</span><h2>{currentFolder} <span className="heading-count">{folder==='inbox'?unread:list.length}</span></h2></div>
+     <div className="panel-heading"><div><span className="section-kicker">YOUR MESSAGES</span><h2>{currentFolder} <span className="heading-count">{total}</span></h2></div>
        <div className="heading-actions"><Icon icon={RefreshCw} title="Refresh inbox" onClick={()=>load(true)}/></div></div>
      <div className="mail-filters"><button className={'filter-chip '+(folder==='inbox'?'active':'')} onClick={()=>folderTo('inbox')}>All</button>
        <button className={'filter-chip '+(folder==='unread'?'active':'')} onClick={()=>folderTo('unread')}>Unread</button>
        <button className={'filter-chip '+(folder==='starred'?'active':'')} onClick={()=>folderTo('starred')}>Starred</button>
-       <span className="row-count">{list.length} messages</span></div>
+       <span className="row-count">{total} messages</span></div>
      {checked.length>0&&<div className="bulkbar"><span>{checked.length} selected</span>
        <Icon icon={MailOpen} title="Mark as read" onClick={()=>modify(checked,{read:true})}/>
        <Icon icon={CheckCheck} title="Mark unread" onClick={()=>modify(checked,{read:false})}/>
@@ -339,8 +343,20 @@ export default function MailPage(){
        </div>)}
        {loading&&list.length===0&&<div className="empty-state"><LoaderCircle className="spin" size={28}/><p>Loading your mail...</p></div>}
      </div>
-     <div className="messages-bottom"><span>{list.length} messages</span><div><Icon icon={ChevronLeft} title="Previous page" disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}/>
-       <Icon icon={ChevronRight} title="Next page" disabled={!hasMore} onClick={()=>setPage(p=>p+1)}/></div></div>
+     <div className="messages-bottom">
+      <span className="pagination-summary" aria-live="polite">{loading&&list.length===0?'Loading...':total>0?(page*pageSize+1)+'–'+Math.min(total,(page+1)*pageSize)+' of '+total:'0 messages'}</span>
+      <div className="pagination-controls">
+        <label className="page-size-label">Show
+          <select aria-label="Messages per page" value={pageSize} onChange={e=>changePageSize(e.target.value)}>
+            <option value={10}>10</option><option value={20}>20</option><option value={40}>40</option>
+          </select>
+          <span className="per-page-text">per page</span>
+        </label>
+        <span className="page-counter">{'Page '+String(page+1)+' of '+String(Math.max(1,Math.ceil(total/pageSize)))}</span>
+        <Icon icon={ChevronLeft} title="Previous page" disabled={page===0} onClick={()=>goToPage(page-1)}/>
+        <Icon icon={ChevronRight} title="Next page" disabled={!hasMore} onClick={()=>goToPage(page+1)}/>
+      </div>
+    </div>
     </div>
     <section className={'preview-panel '+(message?'preview-open':'')}>
      <div className="preview-header"><span className="section-kicker">MESSAGE PREVIEW</span>{message&&<div className="preview-actions"><Icon icon={Printer} title="Print" onClick={()=>window.print()}/><Icon icon={X} title="Close preview" onClick={()=>setSelected(null)}/></div>}</div>
@@ -348,7 +364,7 @@ export default function MailPage(){
        <div className="preview-subject"><span className="eyebrow">CONVERSATION</span><h2>{message.subject||'(No subject)'}</h2><div className="preview-meta">{new Date(message.received_at).toLocaleString()}</div></div>
        <div className="sender-card"><div className="sender-avatar large">{message.sender?.[0]?.toUpperCase()||'M'}</div><div><strong>{message.sender}</strong><small>To: {message.recipients?.join(', ')}</small>
          {message.cc?.length>0&&<small>CC: {message.cc.join(', ')}</small>}</div></div>
-       <div className="mail-body">{message.body_text?<div className="plain-email">{message.body_text}</div>:
+       <div className="mail-body">{detailLoading&&!message.body_text&&!message.body_html?<p className="muted">Loading message content...</p>:message.body_text?<div className="plain-email">{message.body_text}</div>:
         message.body_html?<iframe title="Email HTML content" className="html-frame" sandbox="" referrerPolicy="no-referrer" srcDoc={previewHTML}/>:
         <p className="muted">This email has no message body.</p>}</div>
        {message.attachments?.length>0&&<div className="attachment-bar"><strong>Attachments</strong><div className="attachment-downloads">{message.attachments.map(a=><a key={a.id} className="attachment-pill" href={'/api/mail/attachments/'+a.id}><Paperclip size={16}/>{a.filename}<small>{(a.size_bytes/1048576).toFixed(2)} MB</small></a>)}</div></div>}
