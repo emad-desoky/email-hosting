@@ -30,32 +30,82 @@ export default function MailPage(){
  const [user,setUser]=useState(null),[identities,setIdentities]=useState([]),[identity,setIdentity]=useState(null);
  const [folder,setFolder]=useState('inbox'),[list,setList]=useState([]),[counts,setCounts]=useState({});
  const [selected,setSelected]=useState(null),[checked,setChecked]=useState([]),[compose,setCompose]=useState(null);
- const [term,setTerm]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false);
+ const [term,setTerm]=useState(''),[query,setQuery]=useState(''),[page,setPage]=useState(0),[pageSize,setPageSize]=useState(20),[total,setTotal]=useState(0),[hasMore,setHasMore]=useState(false);
+ const [detail,setDetail]=useState(null),[detailLoading,setDetailLoading]=useState(false);
  const [theme,setTheme]=useState('dark'),[mobile,setMobile]=useState(false),[settings,setSettings]=useState(false);
  const [notificationPanel,setNotificationPanel]=useState(false),[preferences,setPreferences]=useState({notifications:false}),[preferenceBusy,setPreferenceBusy]=useState(false);
  const [notice,setNotice]=useState(null),[loading,setLoading]=useState(true);
  const [receiving,setReceiving]=useState(null),[receivingBusy,setReceivingBusy]=useState(false);
  const lastUnread=useRef(new Map()),queryRef=useRef(null),toastTimer=useRef(null);
+ const cache=useRef(new Map()),listRequest=useRef(null),listGeneration=useRef(0);
+ const activeMailbox=useRef(null),countGeneration=useRef(0),detailGeneration=useRef(0);
  const boxId=identity?.mailboxId,userIsAdmin=user?.role==='admin'&&user.email==='mds2026@mds-healthcare.com';
- const message=list.find(m=>m.id===selected),unread=Number(counts.unread||0);
+ activeMailbox.current=boxId;
+ const message=selected?(detail?.id===selected?detail:list.find(m=>m.id===selected)):null;
+ const unread=Number(counts.unread||0);
  const tell=(message,kind='success')=>{setNotice({message,kind});clearTimeout(toastTimer.current);toastTimer.current=setTimeout(()=>setNotice(null),5000)};
- const load=useCallback(async(showToast=false)=>{
-  if(!boxId)return;
-  try{
-   const qs=new URLSearchParams({mailbox:boxId,folder,page:String(page)});
-   if(term)qs.set('q',term);
-   const [m,c]=await Promise.all([api('/api/mail?'+qs),api('/api/mail?mode=counts&mailbox='+boxId)]);
-   setList(m.messages||[]);setHasMore(Boolean(m.hasMore));setCounts(c.counts||{});
-   const count=Number(c.counts?.unread||0),before=lastUnread.current.get(boxId);
-   if(before!==undefined && count>before && preferences.notifications){
-    tell(count-before===1?'You have a new email.':'You have '+(count-before)+' new emails.');
-    if(typeof Notification!=='undefined'&&Notification.permission==='granted')
-       new Notification('MDS Mail',{body:'New mail received in your inbox.'});
+
+ // Every result is scoped to a mailbox, folder, search, page, and page size.
+ // Aborted or stale requests cannot overwrite the latest visible folder.
+ const pageKey=(mailbox,selectedFolder,search,pageNumber,size)=>
+   JSON.stringify([mailbox,selectedFolder,search,pageNumber,size]);
+ function displayCached(mailbox,selectedFolder,search,pageNumber,size){
+   const entry=cache.current.get(pageKey(mailbox,selectedFolder,search,pageNumber,size));
+   setList(entry?.messages||[]);
+   setTotal(entry?.total||0);
+   setHasMore(Boolean(entry?.hasMore));
+   setLoading(!entry);
+ }
+ const load=useCallback(async(showToast=false,{background=false}={})=>{
+   if(!boxId)return;
+   const generation=++listGeneration.current;
+   listRequest.current?.abort();
+   const controller=new AbortController();
+   listRequest.current=controller;
+   const key=pageKey(boxId,folder,term,page,pageSize);
+   const cached=cache.current.get(key);
+   if(!background){
+     if(cached){
+       setList(cached.messages);setTotal(cached.total);
+       setHasMore(cached.hasMore);setLoading(false);
+     }else{
+       setList([]);setTotal(0);setHasMore(false);setLoading(true);
+     }
    }
-   lastUnread.current.set(boxId,count);
-  }catch(e){if(showToast)tell(e.message,'error')}
-  finally{setLoading(false)}
- },[boxId,folder,term,page,preferences.notifications]);
+   const qs=new URLSearchParams({mailbox:boxId,folder,page:String(page),pageSize:String(pageSize)});
+   if(term)qs.set('q',term);
+   try{
+     const data=await api('/api/mail?'+qs.toString(),{signal:controller.signal});
+     if(controller.signal.aborted||listGeneration.current!==generation)return;
+     const entry={messages:data.messages||[],total:Number(data.total||0),hasMore:Boolean(data.hasMore)};
+     cache.current.set(key,entry);
+     if(cache.current.size>45)cache.current.delete(cache.current.keys().next().value);
+     setList(entry.messages);setTotal(entry.total);setHasMore(entry.hasMore);
+   }catch(e){
+     if(!controller.signal.aborted&&listGeneration.current===generation&&showToast)tell(e.message,'error');
+   }finally{
+     if(!controller.signal.aborted&&listGeneration.current===generation)setLoading(false);
+   }
+ },[boxId,folder,term,page,pageSize]);
+
+ // Background counts never block folder rendering.
+ const loadCounts=useCallback(async(silent=true)=>{
+   if(!boxId)return;
+   const generation=++countGeneration.current;
+   try{
+     const data=await api('/api/mail?mode=counts&mailbox='+encodeURIComponent(boxId));
+     if(generation!==countGeneration.current||activeMailbox.current!==boxId)return;
+     const updated=data.counts||{};
+     setCounts(updated);
+     const latest=Number(updated.unread||0),previous=lastUnread.current.get(boxId);
+     if(previous!==undefined&&latest>previous&&preferences.notifications){
+       tell(latest-previous===1?'You have a new email.':'You have '+String(latest-previous)+' new emails.');
+       if(typeof Notification!=='undefined'&&Notification.permission==='granted')
+         new Notification('MDS Mail',{body:'New mail received in your inbox.'});
+     }
+     lastUnread.current.set(boxId,latest);
+   }catch(e){if(!silent)tell(e.message,'error')}
+ },[boxId,preferences.notifications]);
 
  useEffect(()=>{
   if(typeof window!=='undefined')setTheme(localStorage.getItem('mds-mail-theme')||'dark');
