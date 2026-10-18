@@ -411,7 +411,7 @@ export default function MailPage(){
     <div className="top-actions"><div className="searchbox"><Search size={19}/><form onSubmit={searchMessages}>
       <input ref={queryRef} placeholder="Search mail..." aria-label="Search mail" value={query} onChange={e=>setQuery(e.target.value)}/></form><kbd>⌘K</kbd></div>
       <Icon icon={theme==='dark'?Sun:Moon} title="Change appearance" onClick={()=>setTheme(theme==='dark'?'light':'dark')}/>
-      <Icon icon={Bell} title="Notifications" active={preferences.notifications} onClick={()=>setNotificationPanel(v=>!v)}/>
+      <button type="button" className={"icon-btn notification-bell "+(notificationPanel?"selected":"")} aria-label={"Notifications"+(newAlertIds.length?" ("+newAlertIds.length+" new)":"")} title="Mail notifications" onClick={toggleBell}><Bell size={19}/>{newAlertIds.length>0&&<span className="notification-badge">{newAlertIds.length>9?"9+":newAlertIds.length}</span>}</button>
       <div className="profile-initial">{(user?.display_name||'M')[0]}</div>
     </div>
    </header>
