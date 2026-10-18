@@ -34,6 +34,7 @@ export default function MailPage(){
  const [theme,setTheme]=useState('dark'),[mobile,setMobile]=useState(false),[settings,setSettings]=useState(false);
  const [notificationPanel,setNotificationPanel]=useState(false),[preferences,setPreferences]=useState({notifications:false}),[preferenceBusy,setPreferenceBusy]=useState(false);
  const [notice,setNotice]=useState(null),[loading,setLoading]=useState(true);
+ const [receiving,setReceiving]=useState(null),[receivingBusy,setReceivingBusy]=useState(false);
  const lastUnread=useRef(new Map()),queryRef=useRef(null),toastTimer=useRef(null);
  const boxId=identity?.mailboxId,userIsAdmin=user?.role==='admin'&&user.email==='mds2026@mds-healthcare.com';
  const message=list.find(m=>m.id===selected),unread=Number(counts.unread||0);
@@ -69,6 +70,7 @@ export default function MailPage(){
   return()=>clearTimeout(toastTimer.current)
  },[]);
  useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('mds-mail-theme',theme)},[theme]);
+ useEffect(()=>{if(settings&&userIsAdmin){api('/api/admin/mail/receiving').then(setReceiving).catch(()=>setReceiving(null))}},[settings,userIsAdmin]);
  useEffect(()=>{if(!boxId)return;load(true);const timer=setInterval(()=>{if(!document.hidden)load(false)},18000);return()=>clearInterval(timer)},[load,boxId]);
  useEffect(()=>{
    const key=e=>{
@@ -109,6 +111,15 @@ export default function MailPage(){
    if(msg.folder==='drafts'){openCompose('draft',msg);return}
    setSelected(msg.id);
    if(!msg.read_at)await modify([msg.id],{read:true});
+ }
+ async function enableReceiving(){
+  setReceivingBusy(true);
+  try{
+   const out=await api('/api/admin/mail/receiving',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   const status=await api('/api/admin/mail/receiving');setReceiving(status);
+   tell(out.alreadyConfigured?'Incoming processing is already enabled.':'Incoming webhook connected. Check the domain DNS next.');
+  }catch(e){tell(e.message,'error')}
+  finally{setReceivingBusy(false)}
  }
  async function toggleNotifs(){
   if(preferenceBusy)return;
@@ -234,6 +245,7 @@ export default function MailPage(){
       <button className={'outline-btn '+(preferences.notifications?'on':'')} onClick={toggleNotifs} disabled={preferenceBusy}>
        <Bell size={16}/>{preferenceBusy?'Saving...':preferences.notifications?'Disable':'Enable'}</button></div>
     <div className="setting-row"><div><strong>Signed-in account</strong><p>{user?.email}</p></div><Check size={20}/></div>
+    {userIsAdmin&&<div className="setting-row inbound-status"><div><strong>Incoming mail connection</strong><p>{receiving?.webhookReady?'Receiving webhook connected.':'Receiving webhook is not connected.'}</p><p>Incoming email also requires the correct DNS mail routing.</p>{receiving?.incomingMx?.length>0&&<p>Current mail hosts: {receiving.incomingMx.map(x=>x.host).join(', ')}</p>}<p className="muted">Do not replace an existing mail provider's MX records without planning the switch.</p></div>{!receiving?.webhookReady?<button type="button" className="outline-btn" onClick={enableReceiving} disabled={receivingBusy}>{receivingBusy?'Connecting...':'Enable receiving'}</button>:<Check size={20}/>}</div>}
   </div></div>}
   {notificationPanel&&<div className="notification-popover"><div className="notification-top"><strong>Mail notifications</strong><Icon icon={X} title="Close" onClick={()=>setNotificationPanel(false)}/></div>
    <div className="notification-content"><Bell size={21}/><p>{preferences.notifications?'Alerts are enabled for new messages.':'Notifications are currently turned off.'}</p></div>
