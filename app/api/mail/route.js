@@ -14,7 +14,8 @@ export async function GET(req){
     const svc=service();
     const mode=url.searchParams.get('mode');
 
-    if(mode==='notifications'){const {data,error}=await svc.from('messages').select('id,sender,subject,ingested_at,read_at').eq('mailbox_id',box.id).eq('direction','incoming').eq('folder','inbox').order('ingested_at',{ascending:false}).limit(20);if(error)throw error;return response({messages:data||[]});}\n    if(mode==='counts'){
+    if(mode==='notifications'){const {data,error}=await svc.from('messages').select('id,sender,subject,ingested_at,read_at').eq('mailbox_id',box.id).eq('direction','incoming').eq('folder','inbox').order('ingested_at',{ascending:false}).limit(20);if(error)throw error;return response({messages:data||[]});}
+    if(mode==='counts'){
       const {data,error}=await svc.from('messages')
         .select('folder,read_at,starred').eq('mailbox_id',box.id).limit(5000);
       if(error)throw error;
