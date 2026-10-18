@@ -107,6 +107,68 @@ export default function MailPage(){
    }catch(e){if(!silent)tell(e.message,'error')}
  },[boxId]);
 
+
+ // Detect newly INGESTED messages, not a change in unread count.
+ // A message still triggers an alert when it is read before the next poll.
+ const checkNewMail=useCallback(async()=>{
+   if(!boxId||!user?.id||notifyBusy.current.has(boxId))return;
+   const mailboxAtStart=boxId;
+   notifyBusy.current.add(mailboxAtStart);
+   try{
+     const result=await api('/api/mail?mode=notifications&mailbox='+encodeURIComponent(mailboxAtStart));
+     if(activeMailbox.current!==mailboxAtStart)return;
+     const messages=Array.isArray(result.messages)?result.messages:[];
+     setRecentMail(messages.slice(0,8));
+     const latest=messages[0];
+     if(!latest)return;
+     const storageKey='mds-mail-arrival:'+user.id+':'+mailboxAtStart;
+     let previous=notifyCursor.current.get(storageKey);
+     if(!previous){
+       try{previous=JSON.parse(localStorage.getItem(storageKey)||'null')}catch{}
+     }
+     const current={timestamp:Date.parse(latest.ingested_at)||0,id:String(latest.id||'')};
+     const saveCursor=value=>{
+       notifyCursor.current.set(storageKey,value);
+       try{localStorage.setItem(storageKey,JSON.stringify(value))}catch{}
+     };
+     if(!previous||!Number.isFinite(previous.timestamp)){
+       saveCursor(current);
+       return; // Don't fire a fake "new message" alert on first sign-in.
+     }
+     const newer=item=>{
+       const t=Date.parse(item.ingested_at)||0;
+       return t>previous.timestamp||(t===previous.timestamp&&String(item.id)>String(previous.id||''));
+     };
+     const arrived=messages.filter(newer);
+     if(newer(latest))saveCursor(current);
+     if(!arrived.length)return;
+     // Unread badges and message list update even if the browser blocks popups.
+     cache.current.clear();
+     void loadCounts();
+     if(['inbox','unread','all'].includes(folder))void load(false,{background:true});
+     if(!preferences.notifications)return;
+     setNewAlertIds(old=>[...new Set([...arrived.map(m=>m.id),...old])].slice(0,20));
+     const newest=arrived[0];
+     const heading=arrived.length===1?'New email from '+(newest.sender||'a contact'):String(arrived.length)+' new emails received';
+     tell(heading,'success');
+     if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+       try{
+         const desktop=new Notification(arrived.length===1?'New email · MDS Mail':arrived.length+' new emails · MDS Mail',{
+           body:arrived.length===1?(newest.subject||'(No subject)'):'Open MDS Mail to review your new messages.',
+           tag:'mds-mail-'+mailboxAtStart+'-'+newest.id,
+           icon:'/mds-logo.png'
+         });
+         desktop.onclick=()=>{window.focus();setNotificationPanel(true);setNewAlertIds([])};
+       }catch(error){console.warn('Desktop alert unavailable',error)}
+     }
+   }catch(error){
+     // Polling failures should not interrupt reading or composing email.
+     console.warn('New email notification check was unsuccessful',error);
+   }finally{
+     notifyBusy.current.delete(mailboxAtStart);
+   }
+ },[boxId,user?.id,folder,preferences.notifications,loadCounts,load]);
+
  useEffect(()=>{
   if(typeof window!=='undefined')setTheme(localStorage.getItem('mds-mail-theme')||'dark');
   Promise.all([api('/api/me'),api('/api/mail/identities')]).then(([m,ids])=>{
