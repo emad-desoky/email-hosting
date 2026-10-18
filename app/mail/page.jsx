@@ -60,12 +60,13 @@ export default function MailPage(){
  }
  const load=useCallback(async(showToast=false,{background=false}={})=>{
    if(!boxId)return;
+   const key=pageKey(boxId,folder,term,page,pageSize);
+   // An asynchronous action from an old folder must not cancel the new folder's fetch.
+   if(visibleView.current!==key)return;
    const generation=++listGeneration.current;
    listRequest.current?.abort();
    const controller=new AbortController();
    listRequest.current=controller;
-   const key=pageKey(boxId,folder,term,page,pageSize);
-   if(visibleView.current!==key)return;
    const cached=cache.current.get(key);
    if(!background){
      if(cached){
