@@ -105,3 +105,32 @@ html[data-theme=light] .compose-warning{color:#a83c40;background:#fcecee;border-
   .pagination-controls{justify-content:center}
   .row-count{display:none}
 }
+
+/* Functional real-mail notification center */
+.notification-bell{position:relative;overflow:visible}
+.notification-badge{
+  position:absolute;top:-3px;right:-4px;min-width:18px;height:18px;
+  display:grid;place-items:center;padding:0 4px;border-radius:12px;
+  background:#e84c64;color:#fff;font-size:10px;line-height:1;
+  font-weight:800;border:2px solid var(--panel);pointer-events:none;
+  box-shadow:0 2px 10px #e84c6455;animation:pop .2s ease-out;
+}
+.notification-popover{width:min(390px,calc(100vw - 24px));max-height:min(75dvh,650px);overflow-y:auto}
+.notification-details{display:flex;flex-direction:column;align-items:stretch;gap:11px}
+.notification-row{width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:12px}
+.notification-row span{color:var(--muted)}
+.notification-row strong{font-size:11px;color:var(--fg);text-align:right}
+.notification-details h4{margin:8px 0 0;font-size:12px}
+.notification-details>button{align-self:flex-start}
+.notification-help{border:1px solid #e8a85175;background:#e8a85113;color:var(--fg);padding:11px 12px;border-radius:9px;line-height:1.6}
+.notification-recent{display:flex;flex-direction:column;gap:6px;max-height:270px;overflow-y:auto}
+.notification-mail{
+  border:1px solid var(--border);background:var(--panel2);color:var(--fg);
+  border-radius:9px;display:flex;flex-direction:column;gap:5px;padding:11px 12px;
+  text-align:left;max-width:100%;min-width:0
+}
+.notification-mail:hover{border-color:var(--blue);background:var(--hover)}
+.notification-mail strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notification-mail span{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notification-caption{font-size:10px!important;line-height:1.6;color:var(--muted);margin:0!important}
+@media(max-width:750px){.notification-popover{top:65px;right:12px;max-height:calc(100dvh - 150px)}}
