@@ -510,7 +510,15 @@ export default function MailPage(){
     </div>}
   </div></div>}
   {notificationPanel&&<div className="notification-popover"><div className="notification-top"><strong>Mail notifications</strong><Icon icon={X} title="Close" onClick={()=>setNotificationPanel(false)}/></div>
-   <div className="notification-content"><Bell size={21}/><p>{preferences.notifications?'Alerts are enabled for new messages.':'Notifications are currently turned off.'}</p></div>
+   <div className="notification-content notification-details">
+      <div className="notification-row"><span>App alerts</span><strong>{preferences.notifications?'Enabled':'Disabled'}</strong></div>
+      <div className="notification-row"><span>Chrome desktop alerts</span><strong>{desktopPermission==='granted'?'Allowed':desktopPermission==='denied'?'Blocked':desktopPermission==='default'?'Permission needed':'Unavailable'}</strong></div>
+      {desktopPermission==='denied'&&<p className="notification-help">Chrome has blocked desktop notifications. Use the site controls next to the address bar, open Site settings, and allow Notifications.</p>}
+      <button type="button" className="outline-btn" onClick={testNotifications}>Test notification</button>
+      <h4>Recent incoming mail</h4>
+      <div className="notification-recent">{recentMail.length?recentMail.slice(0,6).map(mail=><button type="button" className="notification-mail" key={mail.id} onClick={()=>openRecentMessage(mail)}><strong>{mail.sender||'Sender'}</strong><span>{mail.subject||'(No subject)'}</span></button>):<p>No incoming messages yet.</p>}</div>
+      <p className="notification-caption">New emails are checked every 10 seconds while MDS Mail is open.</p>
+    </div>
    <button className="outline-btn" onClick={toggleNotifs} disabled={preferenceBusy}>{preferences.notifications?'Turn off notifications':'Enable notifications'}</button></div>}
   {notice&&<div role={notice.kind==='error'?'alert':'status'} className={'toast '+(notice.kind==='error'?'toast-error':'')}>
     {notice.kind==='error'?<AlertCircle size={18}/>:<Check size={18}/>}<span>{notice.message}</span>
