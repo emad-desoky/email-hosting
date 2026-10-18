@@ -227,7 +227,7 @@ export default function MailPage(){
  function switchTo(value){
    const next=identities.find(i=>i.mailboxId+'|'+i.from===value);
    if(!next)return;
-   resetPreview();setIdentity(next);setCounts({});setPage(0);
+   resetPreview();setIdentity(next);setCounts({});setPage(0);setRecentMail([]);setNewAlertIds([]);
    displayCached(next.mailboxId,folder,term,0,pageSize);
  }
  function changePageSize(value){
@@ -328,6 +328,7 @@ export default function MailPage(){
    else if(enable&&typeof Notification!=='undefined')permission=Notification.permission;
    const out=await api('/api/me/preferences',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({notifications:enable})});
    setPreferences(out.preferences);
+   setDesktopPermission(typeof Notification==='undefined'?'unsupported':Notification.permission);
    if(!enable)tell('Email notifications are now turned off.');
    else if(permission==='denied')tell('In-app alerts are on. Allow notifications in your browser settings to get desktop alerts.');
    else tell('Email notifications enabled.');
@@ -491,8 +492,8 @@ export default function MailPage(){
     <div className="settings-head"><h2>Workspace settings</h2><Icon icon={X} title="Close" onClick={()=>setSettings(false)}/></div>
     <div className="setting-row"><div><strong>Appearance</strong><p>Switch between light and dark mode.</p></div>
       <button className="outline-btn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={16}/>:<Moon size={16}/>} {theme==='dark'?'Light mode':'Dark mode'}</button></div>
-    <div className="setting-row"><div><strong>New email notifications</strong><p>{preferences.notifications?'Enabled: you will be notified about new messages.':'Disabled: no new-mail alerts will appear.'}</p>
-      {typeof Notification!=='undefined'&&Notification.permission==='denied'&&<p className="inbound-alert">Chrome is blocking desktop alerts. Open the site controls next to the address bar, then allow Notifications.</p>}</div>
+    <div className="setting-row"><div><strong>New email notifications</strong><p>{preferences.notifications?'In-app alerts enabled. Checks for new mail approximately every 10 seconds.':'Notifications are turned off.'}</p><p>Desktop alerts: {desktopPermission==='granted'?'allowed':desktopPermission==='denied'?'blocked by Chrome':desktopPermission==='default'?'requires browser permission':'not available'}.</p>
+      {desktopPermission==='denied'&&<p className="inbound-alert">Chrome is blocking desktop alerts. Open the site controls next to the address bar, then allow Notifications.</p>}</div>
       <button className={'outline-btn '+(preferences.notifications?'on':'')} onClick={toggleNotifs} disabled={preferenceBusy}>
        <Bell size={16}/>{preferenceBusy?'Saving...':preferences.notifications?'Disable':'Enable'}</button></div>
     <div className="setting-row"><div><strong>Signed-in account</strong><p>{user?.email}</p></div><Check size={20}/></div>
