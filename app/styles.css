@@ -76,3 +76,32 @@ html[data-theme=light] .compose-warning{color:#a83c40;background:#fcecee;border-
 .inbound-mx-records>div{padding:4px 0;line-height:1.5}
 .inbound-mx-records code{font-size:10px;overflow-wrap:anywhere}
 @media(max-width:750px){.inbound-status{flex-direction:column}.inbound-status .outline-btn{margin-top:4px;max-width:100%}}
+
+/* Responsive mail pagination: 10 / 20 / 40 messages per page */
+.messages-bottom{
+  height:auto;min-height:58px;padding:8px 15px;gap:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+}
+.pagination-summary{font-size:11px;color:var(--muted);white-space:nowrap}
+.pagination-controls{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.page-size-label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;white-space:nowrap}
+.page-size-label select{
+  padding:6px 22px 6px 8px;min-width:61px;height:32px;font-size:12px;
+  border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--panel2);color:var(--fg)
+}
+.page-counter{font-size:11px;color:var(--muted);white-space:nowrap;margin-left:3px}
+.pagination-controls .icon-btn{width:30px;height:32px}
+.messages-scroll{overscroll-behavior:contain}
+@media(max-width:1120px){.per-page-text{display:none}}
+@media(max-width:750px){
+  .messages-bottom{padding:8px 11px;min-height:61px}
+  .page-counter{font-size:10px}
+  .pagination-controls{gap:3px}
+  .pagination-controls .icon-btn{width:27px;height:30px}
+}
+@media(max-width:440px){
+  .messages-bottom{justify-content:center;gap:4px}
+  .pagination-summary{width:100%;text-align:center}
+  .pagination-controls{justify-content:center}
+  .row-count{display:none}
+}
